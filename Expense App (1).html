@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Budget — Expense Tracker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f5f4f0;
+    --surface: #ffffff;
+    --surface-2: #f0ede8;
+    --text: #1a1916;
+    --text-muted: #6b6860;
+    --border: #e0dcd5;
+    --radius: 14px;
+    --danger: #c0392b;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 0 0 3rem;
+  }
+
+  /* ── Header ── */
+  .header {
+    background: var(--text);
+    color: #fff;
+    padding: 2rem 1.25rem 1.25rem;
+    text-align: center;
+  }
+  .header-label {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.5);
+    margin-bottom: 0.5rem;
+  }
+  .balance-amount {
+    font-size: clamp(2.5rem, 10vw, 4rem);
+    font-weight: 300;
+    letter-spacing: -0.03em;
+    line-height: 1;
+    margin-bottom: 0.25rem;
+  }
+  .balance-amount span {
+    font-size: 0.5em;
+    font-weight: 400;
+    opacity: 0.6;
+    vertical-align: super;
+    margin-right: 2px;
+  }
+  .balance-count {
+    font-size: 13px;
+    color: rgba(255,255,255,0.45);
+    margin-bottom: 1.25rem;
+  }
+
+  /* View tabs in header */
+  .view-tabs {
+    display: inline-flex;
+    background: rgba(255,255,255,0.1);
+    border-radius: 8px;
+    padding: 3px;
+    gap: 2px;
+  }
+  .view-tab {
+    background: none;
+    border: none;
+    color: rgba(255,255,255,0.55);
+    font-size: 13px;
+    font-family: inherit;
+    font-weight: 500;
+    padding: 6px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    letter-spacing: -0.01em;
+  }
+  .view-tab.active {
+    background: #fff;
+    color: var(--text);
+  }
+
+  /* ── Main ── */
+  .main {
+    max-width: 520px;
+    margin: 0 auto;
+    padding: 1.5rem 1.25rem 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  /* ── Card ── */
+  .card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    padding: 1.25rem;
+  }
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+  }
+  .card-title {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  /* ── Form ── */
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.625rem;
+  }
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+  .form-group.full { grid-column: 1 / -1; }
+  label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+  input, select {
+    height: 42px;
+    padding: 0 0.875rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 15px;
+    font-family: inherit;
+    color: var(--text);
+    background: var(--bg);
+    outline: none;
+    width: 100%;
+    transition: border-color 0.15s;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+  input:focus, select:focus {
+    border-color: var(--text);
+    background: #fff;
+  }
+  input.error, select.error {
+    border-color: var(--danger);
+    background: #fff5f5;
+  }
+  .select-wrap { position: relative; }
+  .select-wrap::after {
+    content: '';
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0; height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid var(--text-muted);
+    pointer-events: none;
+  }
+  .error-msg {
+    font-size: 11px;
+    color: var(--danger);
+    margin-top: 0.25rem;
+    display: none;
+  }
+  .error-msg.visible { display: block; }
+
+  .btn-add {
+    grid-column: 1 / -1;
+    height: 46px;
+    background: var(--text);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    margin-top: 0.25rem;
+    transition: opacity 0.15s, transform 0.1s;
+    letter-spacing: -0.01em;
+  }
+  .btn-add:hover { opacity: 0.85; }
+  .btn-add:active { transform: scale(0.98); }
+
+  /* ── Custom category inline form ── */
+  .add-cat-row {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
+  }
+  .add-cat-row input {
+    flex: 1;
+    height: 36px;
+    font-size: 13px;
+    padding: 0 0.75rem;
+  }
+  .btn-ghost {
+    height: 36px;
+    padding: 0 0.875rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s, border-color 0.15s;
+    flex-shrink: 0;
+  }
+  .btn-ghost:hover { background: var(--surface-2); border-color: #ccc; }
+
+  /* ── Category chips (manage) ── */
+  .cat-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.625rem;
+  }
+  .cat-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 4px 8px 4px 10px;
+    border-radius: 20px;
+    border: 1px solid transparent;
+  }
+  .cat-chip-del {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: inherit;
+    opacity: 0.5;
+    font-size: 14px;
+    line-height: 1;
+    padding: 0;
+    transition: opacity 0.15s;
+  }
+  .cat-chip-del:hover { opacity: 1; }
+
+  /* ── Chart ── */
+  .chart-wrap {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+  }
+  .chart-canvas-wrap {
+    flex-shrink: 0;
+    width: 140px;
+    height: 140px;
+    position: relative;
+  }
+  .chart-empty {
+    width: 140px;
+    height: 140px;
+    border-radius: 50%;
+    background: var(--surface-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .chart-empty-txt {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: center;
+    line-height: 1.4;
+    padding: 0 1rem;
+  }
+  .chart-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    flex: 1;
+    max-height: 180px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .legend-dot {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .legend-label { font-size: 12px; color: var(--text-muted); flex: 1; }
+  .legend-value { font-size: 12px; font-weight: 500; color: var(--text); }
+  .legend-pct { font-size: 11px; color: var(--text-muted); min-width: 30px; text-align: right; }
+
+  /* ── Sort bar ── */
+  .sort-bar {
+    display: flex;
+    gap: 0.375rem;
+    align-items: center;
+  }
+  .sort-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-right: 2px;
+    white-space: nowrap;
+  }
+  .sort-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    font-family: inherit;
+    color: var(--text-muted);
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+    white-space: nowrap;
+  }
+  .sort-btn.active {
+    background: var(--text);
+    color: #fff;
+    border-color: var(--text);
+  }
+
+  /* ── Transaction list ── */
+  .txn-list {
+    display: flex;
+    flex-direction: column;
+    max-height: 400px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .txn-list::-webkit-scrollbar { width: 4px; }
+  .txn-list::-webkit-scrollbar-track { background: transparent; }
+  .txn-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .txn-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border);
+    animation: fadeIn 0.18s ease;
+  }
+  .txn-row:last-child { border-bottom: none; }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-5px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .txn-cat-pill {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 20px;
+    flex-shrink: 0;
+    min-width: 62px;
+    text-align: center;
+    max-width: 90px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .txn-name {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .txn-amount {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    flex-shrink: 0;
+  }
+  .btn-delete {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 6px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: color 0.15s, background 0.15s;
+  }
+  .btn-delete:hover { color: var(--danger); background: #fff0ef; }
+
+  .txn-empty {
+    text-align: center;
+    padding: 2.5rem 1rem;
+    color: var(--text-muted);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .txn-empty strong {
+    display: block;
+    font-size: 15px;
+    color: var(--text);
+    margin-bottom: 0.25rem;
+    font-weight: 500;
+  }
+
+  /* ── Monthly summary ── */
+  .view-panel { display: none; }
+  .view-panel.active { display: block; }
+
+  .month-nav {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .month-nav-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    width: 32px; height: 32px;
+    cursor: pointer;
+    color: var(--text-muted);
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.12s;
+    flex-shrink: 0;
+  }
+  .month-nav-btn:hover { background: var(--surface-2); }
+  .month-label {
+    font-size: 14px;
+    font-weight: 500;
+    flex: 1;
+    text-align: center;
+  }
+  .month-total-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 1rem 0 0.75rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 0.75rem;
+  }
+  .month-total-label { font-size: 13px; color: var(--text-muted); }
+  .month-total-val { font-size: 22px; font-weight: 300; letter-spacing: -0.02em; }
+
+  .summary-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.625rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .summary-row:last-child { border-bottom: none; }
+  .summary-bar-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .summary-bar-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+  }
+  .summary-bar-name { font-weight: 500; }
+  .summary-bar-amt { color: var(--text-muted); font-size: 12px; }
+  .summary-bar-track {
+    height: 5px;
+    background: var(--surface-2);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .summary-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.35s ease;
+  }
+  .summary-count { font-size: 11px; color: var(--text-muted); flex-shrink: 0; min-width: 28px; text-align: right; }
+
+  .month-empty {
+    text-align: center;
+    padding: 2rem 1rem;
+    color: var(--text-muted);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+
+<header class="header" role="banner">
+  <p class="header-label">Total spent</p>
+  <div class="balance-amount" id="balance-display"><span>$</span>0.00</div>
+  <p class="balance-count" id="balance-count">No transactions yet</p>
+  <div class="view-tabs" role="tablist">
+    <button class="view-tab active" role="tab" aria-selected="true"  onclick="switchView('tracker')">Tracker</button>
+    <button class="view-tab"        role="tab" aria-selected="false" onclick="switchView('monthly')">Monthly</button>
+  </div>
+</header>
+
+<main class="main" role="main">
+
+  <!-- ══ TRACKER VIEW ══ -->
+  <div id="view-tracker" class="view-panel active">
+
+    <!-- Add transaction -->
+    <div class="card">
+      <p class="card-title" style="margin-bottom:1rem">Add transaction</p>
+      <form id="txn-form" novalidate>
+        <div class="form-grid">
+          <div class="form-group full">
+            <label for="field-name">Item name</label>
+            <input type="text" id="field-name" placeholder="e.g. Coffee, Bus fare" autocomplete="off">
+            <span class="error-msg" id="err-name">Enter an item name</span>
+          </div>
+          <div class="form-group">
+            <label for="field-amount">Amount ($)</label>
+            <input type="number" id="field-amount" placeholder="0.00" min="0.01" step="0.01">
+            <span class="error-msg" id="err-amount">Enter a valid amount</span>
+          </div>
+          <div class="form-group">
+            <label for="field-category">Category</label>
+            <div class="select-wrap">
+              <select id="field-category">
+                <option value="">Select…</option>
+              </select>
+            </div>
+            <span class="error-msg" id="err-category">Pick a category</span>
+          </div>
+          <button type="submit" class="btn-add">Add transaction</button>
+        </div>
+      </form>
+
+      <!-- Manage custom categories -->
+      <div class="add-cat-row">
+        <input type="text" id="new-cat-input" placeholder="New category name…" maxlength="24" autocomplete="off">
+        <button class="btn-ghost" onclick="addCategory()">+ Add</button>
+      </div>
+      <div class="cat-chips" id="cat-chips"></div>
+    </div>
+
+    <!-- Chart -->
+    <div class="card">
+      <p class="card-title" style="margin-bottom:1rem">Spending by category</p>
+      <div class="chart-wrap">
+        <div class="chart-canvas-wrap">
+          <div class="chart-empty" id="chart-empty">
+            <p class="chart-empty-txt">Add transactions to see the chart</p>
+          </div>
+          <canvas id="spending-chart" style="display:none;"></canvas>
+        </div>
+        <div class="chart-legend" id="chart-legend"></div>
+      </div>
+    </div>
+
+    <!-- Transactions -->
+    <div class="card">
+      <div class="card-header">
+        <p class="card-title">Transactions</p>
+        <div class="sort-bar" role="group" aria-label="Sort transactions">
+          <span class="sort-label">Sort:</span>
+          <button class="sort-btn active" onclick="setSort('newest')"  id="sort-newest">Newest</button>
+          <button class="sort-btn"        onclick="setSort('amount')"  id="sort-amount">Amount</button>
+          <button class="sort-btn"        onclick="setSort('category')" id="sort-category">Category</button>
+        </div>
+      </div>
+      <div class="txn-list" id="txn-list" role="list" aria-label="Transaction history"></div>
+    </div>
+
+  </div><!-- /view-tracker -->
+
+  <!-- ══ MONTHLY VIEW ══ -->
+  <div id="view-monthly" class="view-panel">
+    <div class="card">
+      <div class="card-header">
+        <p class="card-title">Monthly summary</p>
+        <div class="month-nav">
+          <button class="month-nav-btn" onclick="shiftMonth(-1)" aria-label="Previous month">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 11L5 7l4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <span class="month-label" id="month-label"></span>
+          <button class="month-nav-btn" onclick="shiftMonth(1)"  aria-label="Next month">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+      </div>
+      <div id="monthly-body"></div>
+    </div>
+  </div><!-- /view-monthly -->
+
+</main>
+
+<script>
+// ─── Constants & palette ────────────────────────────────────────────────────
+const STORAGE_KEY   = 'expense_transactions';
+const CATS_KEY      = 'expense_categories';
+const MONTHS = ['January','February','March','April','May','June',
+                'July','August','September','October','November','December'];
+
+const BASE_CATS = ['Food','Transport','Fun'];
+
+// Deterministic color palette — cycles for custom cats
+const PALETTE = [
+  '#2d9b65','#3a7fc1','#d4813a','#9b5de5','#f15bb5',
+  '#00bbf9','#e63946','#2ec4b6','#e9c46a','#a8dadc'
+];
+
+// ─── State ──────────────────────────────────────────────────────────────────
+let transactions = [];
+let categories   = [...BASE_CATS];  // ordered list of category names
+let chart        = null;
+let sortMode     = 'newest';        // 'newest' | 'amount' | 'category'
+let currentYear, currentMonth;      // for monthly view
+
+// ─── Storage ────────────────────────────────────────────────────────────────
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    transactions = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(transactions)) transactions = [];
+  } catch(e) { transactions = []; }
+
+  try {
+    const rawC = localStorage.getItem(CATS_KEY);
+    if (rawC) {
+      const parsed = JSON.parse(rawC);
+      if (Array.isArray(parsed) && parsed.length) categories = parsed;
+    }
+  } catch(e) {}
+}
+
+function saveTxns()  { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(transactions)); } catch(e){} }
+function saveCats()  { try { localStorage.setItem(CATS_KEY, JSON.stringify(categories)); } catch(e){} }
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+function fmt(n) { return '$' + n.toFixed(2); }
+function uid()  { return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function catColor(cat) {
+  const i = categories.indexOf(cat);
+  return PALETTE[i % PALETTE.length] || '#888';
+}
+function catStyle(cat) {
+  const c = catColor(cat);
+  return `background:${c}22; color:${c};`;
+}
+
+// ─── Render (full) ──────────────────────────────────────────────────────────
+function render() {
+  renderBalance();
+  renderCategorySelect();
+  renderCategoryChips();
+  renderChart();
+  renderList();
+  renderMonthly();
+}
+
+// ─── Balance ────────────────────────────────────────────────────────────────
+function renderBalance() {
+  const total = transactions.reduce((s,t) => s + t.amount, 0);
+  document.getElementById('balance-display').innerHTML = '<span>$</span>' + total.toFixed(2);
+  const n = transactions.length;
+  document.getElementById('balance-count').textContent =
+    n === 0 ? 'No transactions yet' : n === 1 ? '1 transaction' : n + ' transactions';
+}
+
+// ─── Category select & chips ─────────────────────────────────────────────────
+function renderCategorySelect() {
+  const sel = document.getElementById('field-category');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Select…</option>';
+  categories.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c; opt.textContent = c;
+    if (c === cur) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+function renderCategoryChips() {
+  const wrap = document.getElementById('cat-chips');
+  wrap.innerHTML = categories.map((c,i) => {
+    const color = PALETTE[i % PALETTE.length];
+    const canDelete = !transactions.some(t => t.category === c);
+    return `<span class="cat-chip" style="background:${color}22;color:${color};border-color:${color}44;">
+      ${escHtml(c)}
+      ${canDelete
+        ? `<button class="cat-chip-del" onclick="deleteCategory('${escHtml(c)}')" aria-label="Remove ${escHtml(c)} category">×</button>`
+        : ''}
+    </span>`;
+  }).join('');
+}
+
+// ─── Add / delete category ───────────────────────────────────────────────────
+function addCategory() {
+  const input = document.getElementById('new-cat-input');
+  const name  = input.value.trim();
+  if (!name) return;
+  if (categories.map(c => c.toLowerCase()).includes(name.toLowerCase())) {
+    input.classList.add('error');
+    setTimeout(() => input.classList.remove('error'), 1000);
+    return;
+  }
+  categories.push(name);
+  saveCats();
+  input.value = '';
+  renderCategorySelect();
+  renderCategoryChips();
+  renderChart();
+}
+
+function deleteCategory(name) {
+  if (transactions.some(t => t.category === name)) return; // guard (button hidden anyway)
+  categories = categories.filter(c => c !== name);
+  saveCats();
+  renderCategorySelect();
+  renderCategoryChips();
+  renderChart();
+}
+
+// ─── Chart ──────────────────────────────────────────────────────────────────
+function renderChart() {
+  const totals = {};
+  categories.forEach(c => totals[c] = 0);
+  transactions.forEach(t => { if (totals[t.category] !== undefined) totals[t.category] += t.amount; });
+  const total = Object.values(totals).reduce((a,b) => a+b, 0);
+
+  // Legend
+  const legendEl = document.getElementById('chart-legend');
+  legendEl.innerHTML = categories.map((cat, i) => {
+    const color = PALETTE[i % PALETTE.length];
+    const val   = totals[cat] || 0;
+    const pct   = total > 0 ? Math.round(val/total*100) : 0;
+    return `<div class="legend-item">
+      <div class="legend-dot" style="background:${color}"></div>
+      <span class="legend-label">${escHtml(cat)}</span>
+      <span class="legend-value">${fmt(val)}</span>
+      <span class="legend-pct">${total > 0 ? pct+'%' : '—'}</span>
+    </div>`;
+  }).join('');
+
+  const canvas  = document.getElementById('spending-chart');
+  const emptyEl = document.getElementById('chart-empty');
+  const hasData = total > 0;
+
+  canvas.style.display  = hasData ? 'block' : 'none';
+  emptyEl.style.display = hasData ? 'none'  : 'flex';
+
+  if (!hasData) { if (chart) { chart.destroy(); chart = null; } return; }
+
+  const data   = categories.map(c => totals[c] || 0);
+  const colors = categories.map((_,i) => PALETTE[i % PALETTE.length]);
+
+  if (chart) {
+    chart.data.labels = categories;
+    chart.data.datasets[0].data = data;
+    chart.data.datasets[0].backgroundColor = colors;
+    chart.update('active');
+  } else {
+    chart = new Chart(canvas, {
+      type: 'doughnut',
+      data: { labels: categories, datasets: [{ data, backgroundColor: colors, borderWidth: 0, hoverOffset: 6 }] },
+      options: {
+        cutout: '62%',
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => ' ' + ctx.label + ': ' + fmt(ctx.parsed) } }
+        },
+        animation: { duration: 300 }
+      }
+    });
+  }
+}
+
+// ─── Sort ───────────────────────────────────────────────────────────────────
+function setSort(mode) {
+  sortMode = mode;
+  ['newest','amount','category'].forEach(m => {
+    document.getElementById('sort-' + m).classList.toggle('active', m === mode);
+  });
+  renderList();
+}
+
+function sortedTransactions() {
+  const arr = [...transactions];
+  if (sortMode === 'newest')   return arr.reverse();
+  if (sortMode === 'amount')   return arr.sort((a,b) => b.amount - a.amount);
+  if (sortMode === 'category') return arr.sort((a,b) => a.category.localeCompare(b.category));
+  return arr;
+}
+
+// ─── Transaction list ────────────────────────────────────────────────────────
+function renderList() {
+  const container = document.getElementById('txn-list');
+  if (!transactions.length) {
+    container.innerHTML = '<div class="txn-empty"><strong>Nothing tracked yet</strong>Add a transaction above to get started.</div>';
+    return;
+  }
+  container.innerHTML = sortedTransactions().map(t => `
+    <div class="txn-row" role="listitem">
+      <span class="txn-cat-pill" style="${catStyle(t.category)}" title="${escHtml(t.category)}">${escHtml(t.category)}</span>
+      <span class="txn-name" title="${escHtml(t.name)}">${escHtml(t.name)}</span>
+      <span class="txn-amount">${fmt(t.amount)}</span>
+      <button class="btn-delete" onclick="deleteTransaction('${t.id}')" aria-label="Delete ${escHtml(t.name)}">
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
+          <path d="M2 4h11M6 4V2.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5V4M5 4v8.5a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5V4H5Z"
+                stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+  `).join('');
+}
+
+// ─── Delete transaction ───────────────────────────────────────────────────────
+function deleteTransaction(id) {
+  transactions = transactions.filter(t => t.id !== id);
+  saveTxns();
+  render();
+}
+
+// ─── Monthly summary ──────────────────────────────────────────────────────────
+function renderMonthly() {
+  const label = document.getElementById('month-label');
+  label.textContent = MONTHS[currentMonth] + ' ' + currentYear;
+
+  const monthTxns = transactions.filter(t => {
+    const d = new Date(t.createdAt);
+    return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
+  });
+
+  const body = document.getElementById('monthly-body');
+  if (!monthTxns.length) {
+    body.innerHTML = '<div class="month-empty">No transactions in ' + MONTHS[currentMonth] + '.</div>';
+    return;
+  }
+
+  const monthTotal = monthTxns.reduce((s,t) => s + t.amount, 0);
+  const byCategory = {};
+  monthTxns.forEach(t => {
+    if (!byCategory[t.category]) byCategory[t.category] = { total: 0, count: 0 };
+    byCategory[t.category].total += t.amount;
+    byCategory[t.category].count++;
+  });
+
+  const sorted = Object.entries(byCategory).sort((a,b) => b[1].total - a[1].total);
+  const maxAmt = sorted[0]?.[1].total || 1;
+
+  body.innerHTML = `
+    <div class="month-total-row">
+      <span class="month-total-label">Total for ${MONTHS[currentMonth]}</span>
+      <span class="month-total-val">${fmt(monthTotal)}</span>
+    </div>
+    ${sorted.map(([cat, data]) => {
+      const color = PALETTE[categories.indexOf(cat) % PALETTE.length] || '#888';
+      const pct   = Math.round(data.total / monthTotal * 100);
+      const barW  = Math.round(data.total / maxAmt * 100);
+      return `<div class="summary-row">
+        <div class="summary-bar-wrap">
+          <div class="summary-bar-label">
+            <span class="summary-bar-name">${escHtml(cat)}</span>
+            <span class="summary-bar-amt">${fmt(data.total)} · ${pct}%</span>
+          </div>
+          <div class="summary-bar-track">
+            <div class="summary-bar-fill" style="width:${barW}%;background:${color};"></div>
+          </div>
+        </div>
+        <span class="summary-count">${data.count} item${data.count !== 1 ? 's' : ''}</span>
+      </div>`;
+    }).join('')}
+  `;
+}
+
+function shiftMonth(delta) {
+  currentMonth += delta;
+  if (currentMonth > 11) { currentMonth = 0;  currentYear++; }
+  if (currentMonth < 0)  { currentMonth = 11; currentYear--; }
+  renderMonthly();
+}
+
+// ─── View switching ───────────────────────────────────────────────────────────
+function switchView(view) {
+  document.getElementById('view-tracker').classList.toggle('active', view === 'tracker');
+  document.getElementById('view-monthly').classList.toggle('active', view === 'monthly');
+  document.querySelectorAll('.view-tab').forEach((btn, i) => {
+    const v = i === 0 ? 'tracker' : 'monthly';
+    btn.classList.toggle('active', v === view);
+    btn.setAttribute('aria-selected', v === view);
+  });
+  if (view === 'monthly') renderMonthly();
+}
+
+// ─── Form ─────────────────────────────────────────────────────────────────────
+const form      = document.getElementById('txn-form');
+const fieldName = document.getElementById('field-name');
+const fieldAmt  = document.getElementById('field-amount');
+const fieldCat  = document.getElementById('field-category');
+
+function setError(el, errId, show) {
+  el.classList.toggle('error', show);
+  document.getElementById(errId).classList.toggle('visible', show);
+}
+function clearErrors() {
+  setError(fieldName, 'err-name', false);
+  setError(fieldAmt,  'err-amount', false);
+  setError(fieldCat,  'err-category', false);
+}
+
+form.addEventListener('submit', e => {
+  e.preventDefault();
+  clearErrors();
+  const name      = fieldName.value.trim();
+  const amountRaw = parseFloat(fieldAmt.value);
+  const category  = fieldCat.value;
+  let valid = true;
+  if (!name)                          { setError(fieldName, 'err-name', true);     valid = false; }
+  if (isNaN(amountRaw) || amountRaw <= 0) { setError(fieldAmt, 'err-amount', true); valid = false; }
+  if (!category)                      { setError(fieldCat,  'err-category', true); valid = false; }
+  if (!valid) return;
+
+  transactions.push({
+    id: uid(), name, amount: Math.round(amountRaw * 100) / 100,
+    category, createdAt: new Date().toISOString()
+  });
+  saveTxns();
+  render();
+  form.reset();
+  fieldName.focus();
+});
+
+[fieldName, fieldAmt, fieldCat].forEach(el => {
+  el.addEventListener('input', () => el.classList.remove('error'));
+});
+
+document.getElementById('new-cat-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); addCategory(); }
+});
+
+// ─── Boot ─────────────────────────────────────────────────────────────────────
+const now = new Date();
+currentYear  = now.getFullYear();
+currentMonth = now.getMonth();
+
+load();
+render();
+</script>
+</body>
+</html>
